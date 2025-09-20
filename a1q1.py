@@ -1,5 +1,5 @@
 """
-Z-algorithm based pattern matching with wildcard support
+Z-algorithm based pattern matching
 Pattern may contain '#' characters that match any character in text
 """
 
@@ -16,20 +16,20 @@ def compute_z_array(s):
     
     for i in range(1, n):
         if i > r:
-            # Case 1: i is outside current Z-box
+            # case 1: when i is outside of the current Z-box
             l, r = i, i
             while r < n and s[r - l] == s[r]:
                 r += 1
             z[i] = r - l
             r -= 1
         else:
-            # Case 2: i is inside current Z-box
+            # case 2: i is inside the current Z-box
             k = i - l
             if z[k] < r - i + 1:
-                # Case 2a: Z[k] < remaining length in Z-box
+                # case 2a: Z[k] < remaining length in the Z-box
                 z[i] = z[k]
             else:
-                # Case 2b: Z[k] >= remaining length, need to extend
+                # case 2b: Z[k] >= remaining length, we dont need to extend
                 l = i
                 while r < n and s[r - l] == s[r]:
                     r += 1
@@ -48,23 +48,22 @@ def find_pattern_matches(txt, pat):
     if m == 0 or m > n:
         return matches
     
-    # Create combined string: pattern + '$' + text
-    # We use '$' as a separator that doesn't appear in text or pattern
+    # concatenate pat with a separating character then the txt
+    # we use '$' as the separating character since it does not appear in pat or txt
     combined = pat + '$' + txt
     
-    # Compute Z-array for the combined string
+    # compute Z-array for the combined string
     z_array = compute_z_array(combined)
     
-    # Check for matches starting at each position in text
-    # The text part starts at index m+1 in the combined string
-    for i in range(m + 1, len(combined) - m + 1):  # Ensure we don't go out of bounds
-        # The Z-value at position i in combined string
-        # indicates the length of match with pattern prefix
+    # we iterate through the txt part and check for matches 
+    # The text part starts at index m+1 in the combined string since pat + '$' is of length m+1
+    for i in range(m + 1, len(combined) - m + 1):  
+        # The Z-value at position i in combined string indicates the length of match with pattern prefix
         if z_array[i] == m:
             # Exact match found (position in text = i - m - 1)
             matches.append(i - m - 1)
         elif z_array[i] < m:
-            # Partial match, check if we can complete the match with wildcards
+            # Partial match, so we need to check if the rest of the character in pattern are wildcards
             matched_length = z_array[i]
             
             # Check if we have enough characters remaining in text
@@ -72,7 +71,7 @@ def find_pattern_matches(txt, pat):
             if text_pos + m > n:  # Pattern would extend beyond text
                 continue
                 
-            # Check if the remaining pattern characters are all wildcards
+            # we check if the remaining pattern characters are all wildcards
             # or match the corresponding text characters
             valid_match = True
             for j in range(matched_length, m):
@@ -83,10 +82,10 @@ def find_pattern_matches(txt, pat):
                     break
                 
                 if pat[j] == '#':
-                    # Wildcard matches any character
+                    # wildcard matches any character
                     continue
                 elif pat[j] != combined[combined_pos]:
-                    # Character doesn't match and it's not a wildcard
+                    # character doesn't match and it's not a wildcard
                     valid_match = False
                     break
             
