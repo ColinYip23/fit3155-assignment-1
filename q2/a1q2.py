@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Reverse Boyer-Moore algorithm implementation with both extended bad character
 and good suffix rules. Pattern shifts leftwards, scanning from left to right.

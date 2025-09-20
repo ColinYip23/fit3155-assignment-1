@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 BWT-based pattern matching with wildcard support
 Pattern may contain '#' characters that match any character in text
