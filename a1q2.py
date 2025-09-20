@@ -10,30 +10,31 @@ import sys
 def preprocess_extended_bad_character(pat):
     """
     Precompute extended bad character table for O(1) lookups.
-    Returns: table where table[c][j] = rightmost occurrence of c in pat[0:j]
+    Returns the table where table[c][j] = leftmost occurrence of the mismatched character in pat[j+1:]
     """
     m = len(pat)
     chars = set(pat)
     table = {c: [-1] * (m + 1) for c in chars}
 
-    for c in chars:
-        next_pos = -1
-        for j in range(m - 1, -1, -1):  # scan right-to-left
-            if pat[j] == c:
-                next_pos = j
-            table[c][j] = next_pos
+    # For each character, track its next occurrence as we scan left to right
+    next_pos = {c: -1 for c in chars}
+
+    for j in range(m - 1, -1, -1):
+        for c in chars:
+            table[c][j] = next_pos[c]
+        next_pos[pat[j]] = j
 
     return table
 
 
-def preprocess_good_suffix(pat):
+def preprocess_good_prefix(pat):
     """
-    Preprocess good suffix shift table for reverse Boyer-Moore.
-    Returns an array where good_suffix[i] is the shift distance when
+    Preprocess good suffix (but in this case since we do reverse it is actually the prefix) shift table for reverse Boyer-Moore.
+    Returns an array where good_prefix[i] is the shift distance when
     a prefix of length i has been matched.
     """
     m = len(pat)
-    good_suffix = [0] * (m + 1)
+    good_prefix = [0] * (m + 1)
     
     # Case 1: The matched prefix appears elsewhere in the pattern
     # Precompute the border array (fundamental preprocessing)
@@ -43,8 +44,8 @@ def preprocess_good_suffix(pat):
     
     while i > 0:
         while j <= m and pat[i - 1] != pat[j - 1]:
-            if good_suffix[j] == 0:
-                good_suffix[j] = j - i
+            if good_prefix[j] == 0:
+                good_prefix[j] = j - i
             j = border[j]
         i -= 1
         j -= 1
@@ -53,12 +54,12 @@ def preprocess_good_suffix(pat):
     # Case 2: Only part of the matched prefix appears at the end
     j = border[0]
     for i in range(0, m + 1):
-        if good_suffix[i] == 0:
-            good_suffix[i] = j
+        if good_prefix[i] == 0:
+            good_prefix[i] = j
         if i == j:
             j = border[j]
     
-    return good_suffix
+    return good_prefix
 
 def reverse_boyer_moore(txt, pat):
     """
@@ -77,7 +78,7 @@ def reverse_boyer_moore(txt, pat):
     
     # Preprocess both rules
     bad_char_table = preprocess_extended_bad_character(pat)
-    good_suffix_table = preprocess_good_suffix(pat)
+    good_prefix_table = preprocess_good_prefix(pat)
     
     # Start with right ends aligned: pattern at position n - m
     s = n - m  # pattern starts at position s in text
@@ -91,10 +92,10 @@ def reverse_boyer_moore(txt, pat):
         
         if j == m:
             # Pattern found at position s + 1 (1-based)
-            print(f"Match found at position {s + 1}")
+
             matches.append(s + 1)
-            shift = good_suffix_table[0]
-            print(f"Using good suffix rule: shift = {shift}")
+            shift = good_prefix_table[0]
+
             s -= shift
         else:
             # Mismatch at position j
@@ -107,20 +108,19 @@ def reverse_boyer_moore(txt, pat):
                 if leftmost_pos != -1:
                     bc_shift = leftmost_pos - j
                 else:
-                    bc_shift = m - j
+                    bc_shift = 1
             
             # Calculate good suffix shift
-            gs_shift = good_suffix_table[j] if j > 0 else 1
+            gs_shift = good_prefix_table[j] if j > 0 else 1
             
             # Use the maximum shift for optimal performance
-            shift = gs_shift
-            print(f"Mismatch at text[{s + j}] = '{mismatched_char}', pattern[{j}]")
-            print(f"Bad character shift = {bc_shift}, Good suffix shift = {gs_shift}, Chosen shift = {shift}")
+            shift = max(gs_shift, bc_shift)
+
             s -= shift
         
         jump_count += 1
     
-    print(f"Total jumps performed: {jump_count}")
+
     return matches
 
 
