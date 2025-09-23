@@ -7,23 +7,24 @@ import sys
 
 def construct_bwt_naive(txt):
     """
-    Construct BWT using naive method (sorting cyclic permutations)
-    Returns: BWT string and suffix array
+    constructing the BWT using naive method
+    we create all the cyclic rotations of the text, sort it lexicographically then get the last characters of each rotation
+    at last, return the BWT string and suffix array
     """
     n = len(txt)
     if n == 0:
         return "", []
     
-    # Create all cyclic rotations
+    # get the cyclic rotations of the text
     rotations = []
     for i in range(n):
         rotation = txt[i:] + txt[:i]
         rotations.append((rotation, i))
     
-    # Sort rotations lexicographically
+    # sort all the rotations lexicographically
     rotations.sort(key=lambda x: x[0])
     
-    # Extract BWT (last characters of sorted rotations) and suffix array
+    # get the BWT and suffix array
     bwt = ''.join(rotation[0][-1] for rotation in rotations)
     suffix_array = [rotation[1] for rotation in rotations]
     
@@ -31,23 +32,23 @@ def construct_bwt_naive(txt):
 
 def create_rank_arrays(bwt):
     """
-    Create rank arrays for BWT to enable efficient LF mapping
-    Returns: rank arrays and first occurrence mapping
+    create the rank arrays for BWT so that it is easier to do LF mapping
+    return the rank arrays and first occurrence mapping
     """
     n = len(bwt)
     chars = sorted(set(bwt))
     
-    # Create rank arrays for each character
+    # create rank arrays for each character
     rank_arrays = {}
     for c in chars:
         rank_arrays[c] = [0] * (n + 1)
     
-    # Create cumulative counts
+    # get the cumulative counts of each character
     for i in range(n):
         for c in chars:
             rank_arrays[c][i + 1] = rank_arrays[c][i] + (1 if bwt[i] == c else 0)
     
-    # Create first occurrence mapping
+    # get the first occurence mapping of each character
     first_occurrence = {}
     cumulative = 0
     for c in chars:
@@ -58,8 +59,8 @@ def create_rank_arrays(bwt):
 
 def backward_search_with_wildcards(bwt, first_occurrence, rank_arrays, pat, suffix_array):
     """
-    Perform backward search on BWT for pattern with wildcards
-    Returns: list of matching positions
+    perform backward search on BWT for pattern with wildcards
+    and return list of matching positions
     """
     n = len(bwt)
     m = len(pat)
@@ -68,13 +69,14 @@ def backward_search_with_wildcards(bwt, first_occurrence, rank_arrays, pat, suff
     if m == 0:
         return []
     
-    # Start with the entire BWT range
+    # start with the entire BWT range
     ranges = [(0, n - 1, m - 1)]  # (start, end, pattern_index)
     
+    # while the stack is not empty
     while ranges:
         start, end, idx = ranges.pop()
         
-        # If we've processed the entire pattern, add all matches in this range
+        # if we have processed the entire pattern, add all matches in this range
         if idx < 0:
             for i in range(start, end + 1):
                 matches.add(suffix_array[i])
@@ -83,12 +85,12 @@ def backward_search_with_wildcards(bwt, first_occurrence, rank_arrays, pat, suff
         c = pat[idx]
         
         if c == '#':
-            # Wildcard: try all possible characters
+            # when we see the wildcard, we try all possible characters
             for char in rank_arrays.keys():
                 if char == '$':  # Skip terminator if present
                     continue
                 
-                # Calculate new range for this character
+                # we calculate new range for this character
                 new_start = first_occurrence.get(char, 0) + rank_arrays[char][start]
                 new_end = first_occurrence.get(char, 0) + rank_arrays[char][end + 1] - 1
                 
@@ -110,8 +112,7 @@ def backward_search_with_wildcards(bwt, first_occurrence, rank_arrays, pat, suff
 
 def find_pattern_matches_bwt(txt, pat):
     """
-    Find all occurrences of pattern in text using BWT
-    Pattern may contain '#' wildcards that match any character
+    find all occurrences of pattern in text using BWT
     """
     n, m = len(txt), len(pat)
     
@@ -127,7 +128,7 @@ def find_pattern_matches_bwt(txt, pat):
     
     # Create rank arrays and first occurrence mapping
     rank_arrays, first_occurrence = create_rank_arrays(bwt)
-    
+
     # Perform backward search with wildcards
     matches = backward_search_with_wildcards(bwt, first_occurrence, rank_arrays, pat, suffix_array)
     
