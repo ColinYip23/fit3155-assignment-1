@@ -1,137 +1,157 @@
-"""
-Reverse Boyer-Moore algorithm implementation with both extended bad character
-and good suffix rules. Pattern shifts leftwards, scanning from left to right.
-Uses the rule that gives the largest shift.
-"""
-
 import sys
+from math import inf
+
+def z_array(s):
+    n = len(s)
+    z = [0] * n
+    l = r = 0
+    for i in range(1, n):
+        if i <= r:
+            z[i] = min(r - i + 1, z[i - l])
+        while i + z[i] < n and s[z[i]] == s[i + z[i]]:
+            l, r = i, i + z[i]
+            z[i] += 1
+    return z
+
+def pi_from_z(z):
+    """
+    convert Z values to  array pi, where
+    basically we are getting pi[t] = length of longest proper prefix of s[:t+1] that is also its suffix.
+    time complexity O(n): each pi position is assigned at most once.
+    """
+    n = len(z)
+    pi = [0] * n
+    for i in range(1, n):
+        k = z[i]
+        # we start from k = z[i] and assign descending lengths to the segment [i, i+k-1]
+        # stopping when a position already has a value.
+        while k > 0:
+            pos = i + k - 1
+            if pi[pos] == 0:
+                pi[pos] = k
+                k -= 1
+            else:
+                break
+    return pi
 
 def preprocess_extended_bad_character(pat):
     """
-    Precompute extended bad character table for O(1) lookups.
-    Returns the table where table[c][j] = leftmost occurrence of the mismatched character in pat[j+1:]
+    preprocess bad-character table for reverse BM.
+    rather than get the rightmost index of the mismatched character to the left of pat, we get the leftmost index to the right of the mismatch
+    since we scan left to right.
+    table[c][j] = leftmost index of c in pat[j+1:], or -1 if none.
     """
     m = len(pat)
     chars = set(pat)
     table = {c: [-1] * (m + 1) for c in chars}
-
-    # For each character, track its next occurrence as we scan left to right
     next_pos = {c: -1 for c in chars}
-
     for j in range(m - 1, -1, -1):
         for c in chars:
             table[c][j] = next_pos[c]
         next_pos[pat[j]] = j
-
     return table
-
 
 def preprocess_good_prefix(pat):
     """
-    Preprocess good suffix (but in this case since we do reverse it is actually the prefix) shift table for reverse Boyer-Moore.
-    Returns an array where good_prefix[i] is the shift distance when
-    a prefix of length i has been matched.
+    we get the good-prefix shifts for reverse BM instead of the good suffix shifts since we scan left to right
+    gp[j] for j in [0..m]. If the matched prefix of length j reoccurs at some start p>=1 (Z[p] >= j), then shift = minimal such p.
+    else we fallback to border of prefix j: shift = max(1, j - border_len(j)).
+    for full match (j == m): shift by period = m - longest_border(pat).
     """
     m = len(pat)
-    good_prefix = [0] * (m + 1)
-    
-    # Case 1: The matched prefix appears elsewhere in the pattern
-    # Precompute the border array (fundamental preprocessing)
-    border = [0] * (m + 1)
-    i, j = m, m + 1
-    border[i] = j
-    
-    while i > 0:
-        while j <= m and pat[i - 1] != pat[j - 1]:
-            if good_prefix[j] == 0:
-                good_prefix[j] = j - i
-            j = border[j]
-        i -= 1
-        j -= 1
-        border[i] = j
-    
-    # Case 2: Only part of the matched prefix appears at the end
-    j = border[0]
-    for i in range(0, m + 1):
-        if good_prefix[i] == 0:
-            good_prefix[i] = j
-        if i == j:
-            j = border[j]
-    
-    return good_prefix
+    if m == 0:
+        return [1]
+    z = z_array(pat)
+
+    # Minimal start p for a reoccurrence of each prefix length
+    bestShift = [inf] * (m + 1)
+    for p in range(1, m):
+        L = z[p]
+        if L > 0 and bestShift[L] > p:
+            bestShift[L] = p
+    # Make usable for smaller lengths too
+    for L in range(m - 1, 0, -1):
+        if bestShift[L] > bestShift[L + 1]:
+            bestShift[L] = bestShift[L + 1]
+
+    # we get the border lengths from the Z-array
+    pi = pi_from_z(z)
+
+    def border_len(prefix_len):
+        if prefix_len == 0:
+            return 0
+        return pi[prefix_len - 1]
+
+    gp = [1] * (m + 1)
+    for j in range(1, m):
+        if bestShift[j] != inf:
+            gp[j] = bestShift[j]
+        else:
+            k = border_len(j)
+            gp[j] = max(1, j - k)
+
+    # full match shift =  the length of the entire period
+    gp[m] = m - border_len(m) if m > 0 else 1
+    gp[0] = 1
+    return gp
+
 
 def reverse_boyer_moore(txt, pat):
     """
-    Reverse Boyer-Moore algorithm with both extended bad character
-    and good suffix rules. Shifts pattern leftwards, scans left to right.
-    Uses the rule that gives the largest shift.
-    Includes debug output for shift decisions and jump count.
+    Reverse Boyer-Moore:
+    align pat at s = n - m and compare j=0..m-1 (left->right).
+    on mismatch at j with text char c:
+    we get bad-char shift = (k - j) if c occurs at k>j in pat else (m - j)
+    and good-prefix shift = gp[j] (or 1 when j==0)
+    then we shift left by max of the two (>=1).
+    on full match: shift by gp[m].
+    return 1-based indexing match positions.
     """
     n, m = len(txt), len(pat)
-    matches = []
-    jump_count = 0  # Track number of jumps
-    
     if m == 0 or n == 0 or m > n:
-        print("No valid pattern or text to search.")
-        return matches
-    
-    # Preprocess both rules
-    bad_char_table = preprocess_extended_bad_character(pat)
-    good_prefix_table = preprocess_good_prefix(pat)
-    
-    # Start with right ends aligned: pattern at position n - m
-    s = n - m  # pattern starts at position s in text
-    
+        return []
+
+    # we preprocess the shifts by calling the respective functions
+    bc = preprocess_extended_bad_character(pat)
+    gp = preprocess_good_prefix(pat)
+
+    matches = []
+    s = n - m  # we start at the right end of text
+
     while s >= 0:
-        j = 0  # scan from left to right
-        
-        # Scan pattern from left to right
+        j = 0
         while j < m and pat[j] == txt[s + j]:
             j += 1
-        
+
         if j == m:
-            # Pattern found at position s + 1 (1-based)
+            matches.append(s + 1)         # 1-based indexing for output so we add 1
+            shift = gp[m]
+            s -= shift if shift > 0 else 1
+            continue
 
-            matches.append(s + 1)
-            shift = good_prefix_table[0]
+        c = txt[s + j]
 
-            s -= shift
+        # we calculate the bad character shift
+        if c in bc:
+            k = bc[c][j]                  # leftmost in pat[j+1:]
+            bc_shift = (k - j) if k != -1 else (m - j)
         else:
-            # Mismatch at position j
-            mismatched_char = txt[s + j]
-            
-            # Calculate bad character shift
-            bc_shift = j + 1
-            if mismatched_char in bad_char_table:
-                leftmost_pos = bad_char_table[mismatched_char][j]
-                if leftmost_pos != -1:
-                    bc_shift = leftmost_pos - j
-                else:
-                    bc_shift = 1
-            
-            # Calculate good suffix shift
-            gs_shift = good_prefix_table[j] if j > 0 else 1
-            
-            # Use the maximum shift for optimal performance
-            shift = max(gs_shift, bc_shift)
+            bc_shift = (m - j)
 
-            s -= shift
-        
-        jump_count += 1
-    
+        # calculate good prefix shift
+        gs_shift = gp[j] if j > 0 else 1
+
+        # we shift the pat leftwards along the text by the max of the 2 shifts
+        s -= max(1, bc_shift, gs_shift)
 
     return matches
 
-
 def main():
-    # Check command line arguments
     if len(sys.argv) != 3:
         print("Usage: python a1q2.py <text_filename> <pattern_filename>")
         sys.exit(1)
-    
-    # Read input files
+
     text_file, pattern_file = sys.argv[1], sys.argv[2]
-    
     try:
         with open(text_file, 'r') as f:
             txt = f.read().strip()
@@ -140,15 +160,13 @@ def main():
     except FileNotFoundError as e:
         print(f"Error: {e}")
         sys.exit(1)
-    
-    # Find pattern matches using reverse Boyer-Moore
+
     matches = reverse_boyer_moore(txt, pat)
-    
-    # Write results to output file
+
     with open('output_a1q2.txt', 'w') as f:
-        for match_pos in matches:
-            f.write(f"{match_pos}\n")
-    
+        for pos in matches:
+            f.write(f"{pos}\n")
+
     print(f"Found {len(matches)} matches. Results written to output_a1q2.txt")
 
 if __name__ == "__main__":
